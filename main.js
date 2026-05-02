@@ -2,15 +2,13 @@
 const vertexShaderSource = `#version 300 es
 // attributes
 layout(location=0) in vec4 aPosition;
-layout(location=1) in float aPointSize;
-layout(location=2) in vec4 aColor;
+layout(location=1) in vec4 aColor;
 
 // varyings
 out vec4 vColor;
 
 void main() {
     vColor = aColor;
-    gl_PointSize = aPointSize;
     gl_Position = aPosition;
 }`;
 
@@ -31,63 +29,87 @@ const gl = document.querySelector('canvas').getContext('webgl2');
 
 // webgl2 program
 const program = gl.createProgram();
+{
+    // create vertex shader
+    const vertexShader = gl.createShader(gl.VERTEX_SHADER); // create shader
+    gl.shaderSource(vertexShader, vertexShaderSource); // set GLSLS source code
+    gl.compileShader(vertexShader); // compile shader
+    gl.attachShader(program, vertexShader); // attach to program
 
-// create vertex shader
-const vertexShader = gl.createShader(gl.VERTEX_SHADER); // create shader
-gl.shaderSource(vertexShader, vertexShaderSource); // set GLSLS source code
-gl.compileShader(vertexShader); // compile shader
-gl.attachShader(program, vertexShader); // attach to program
+    // create fragment shaderw
+    const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // create shader
+    gl.shaderSource(fragmentShader, fragmentShaderSource); // set GLSLS source code
+    gl.compileShader(fragmentShader); // compile shader
+    gl.attachShader(program, fragmentShader); // attach to program
 
-// create fragment shaderw
-const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER); // create shader
-gl.shaderSource(fragmentShader, fragmentShaderSource); // set GLSLS source code
-gl.compileShader(fragmentShader); // compile shader
-gl.attachShader(program, fragmentShader); // attach to program
+    // link program
+    gl.linkProgram(program);
 
-// link program
-gl.linkProgram(program);
-
-if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fails
-    console.log(gl.getShaderInfoLog(fragmentShader));
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fails
+        console.log(gl.getShaderInfoLog(fragmentShader));
+    }
 }
 
 gl.useProgram(program);
 
-const vertData = new Float32Array([ // position, point size buffer, color
-	-0.6618,-0.7687, 	50, 	0.5849, 0.7600, 0.4662,
-	-0.3149, 0.7417, 	10, 	0.9232, 0.9332, 0.4260,
-	 0.9749,-0.8996, 	40, 	0.6969, 0.5353, 0.1471,
-	-0.9202,-0.2956, 	90, 	0.2899, 0.9056, 0.7799,
-	 0.4550,-0.0642, 	20, 	0.2565, 0.6451, 0.8498,
-	 0.6192, 0.5755, 	70, 	0.6133, 0.8137, 0.4046,
-	-0.5946, 0.7057, 	20, 	0.6745, 0.5229, 0.4518,
-	 0.6365, 0.7236, 	70, 	0.4690, 0.0542, 0.7396,
-	 0.8625,-0.0835, 	20, 	0.3708, 0.6588, 0.8611,
-	 0.7997, 0.4695, 	70, 	0.7490, 0.3797, 0.6879,
+const arrayVertexData = new Float32Array([ // x,y position and rbg color
+	0,0,				1,0,0,
+	0.00000,1.00000,	1,0,0,
+	0.95106,0.30902,	1,0,0,
+
+	0,0,				0,1,0,
+	0.95106,0.30902,	0,1,0,
+	0.58779,-.80902,	0,1,0,
+
+	0,0,				0,0,1,
+	0.58779,-.80902,	0,0,1,
+	-.58779,-.80902,	0,0,1,
+
+	0,0,				1,1,0,
+	-.58779,-.80902,	1,1,0,
+	-.95106,0.30902,	1,1,0,
+
+	0,0,				1,0,1,
+	-.95106,0.30902,	1,0,1,
+	0.00000,1.00000,	1,0,1,
 ]);
 
-// location of attributes
-const aPositionLoc = 0;
-const aPointSizeLoc = 1;
-const aColorLoc = 2;
+const elementVertexData = new Float32Array([
+	0,0,				0,0,0,
+	0.00000,1.00000,	1,0,0,
+	0.95106,0.30902,	0,1,0,
+	0.58779,-.80902,	0,0,1,
+	-.58779,-.80902,	1,1,0,
+	-.95106,0.30902,	1,0,1,
+]);
 
-gl.vertexAttrib4f(aPositionLoc, 0, 0, 0, 1);
-gl.vertexAttrib1f(aPointSizeLoc, 50);
-gl.vertexAttrib4f(aColorLoc, 1, 0, 0, 1);
+const elementIndexData = new Uint8Array([
+    0,1,2,
+    0,2,3,
+    0,3,4,
+    0,4,5,
+    0,5,1,
+])
 
-// array buffer
-const vertBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, vertBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, vertData, gl.STATIC_DRAW);
+// buffer
+const arrayVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, arrayVertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, arrayVertexData, gl.STATIC_DRAW);
 
-// unravel chain of js ints and floats into the values that shader excepts/needs
-gl.vertexAttribPointer(aPositionLoc, 2, gl.FLOAT, false, 24, 0);
-gl.vertexAttribPointer(aPointSizeLoc, 1, gl.FLOAT, false, 24, 8);
-gl.vertexAttribPointer(aColorLoc, 3, gl.FLOAT, false, 24, 12);
+const elementVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, elementVertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, elementVertexData, gl.STATIC_DRAW);
 
-// enable attributes
-gl.enableVertexAttribArray(aPositionLoc);
-gl.enableVertexAttribArray(aPointSizeLoc);
-gl.enableVertexAttribArray(aColorLoc);
+const elementIndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementIndexBuffer);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, elementIndexData, gl.STATIC_DRAW);
 
-gl.drawArrays(gl.POINTS, 0, 10);
+// gl.bindBuffer(gl.ARRAY_BUFFER, arrayVertexBuffer);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 5*4, 0);
+gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 5*4, 2*4);
+
+gl.enableVertexAttribArray(0);
+gl.enableVertexAttribArray(1);
+
+// gl.drawArrays(gl.TRIANGLES, 0, 15);
+gl.drawElements(gl.TRIANGLES, 15, gl.UNSIGNED_BYTE, 0);
