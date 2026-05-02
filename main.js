@@ -2,26 +2,31 @@
 const vertexShaderSource = `#version 300 es
 // attributes
 layout(location=0) in vec4 aPosition;
-layout(location=1) in vec4 aColor;
+layout(location=1) in vec2 aTexCoord;
 
 // varyings
-out vec4 vColor;
+out vec2 vTexCoord;
 
-void main() {
-    vColor = aColor;
+void main()
+{
+    vTexCoord = aTexCoord; 
     gl_Position = aPosition;
+    
 }`;
 
 // varyings come in from vertex shader, and color info goes out to frame buffer/canvas
 const fragmentShaderSource = `#version 300 es
 precision mediump float;
 
-in vec4 vColor;
+uniform sampler2D uPixelSampler;
+uniform sampler2D uKittenSampler;
+in vec2 vTexCoord;
 
 out vec4 fragColor;
 
-void main() {
-    fragColor = vColor;
+void main()
+{
+    fragColor = texture(uPixelSampler, vTexCoord) * texture(uKittenSampler, vTexCoord);
 }`;
 
 // get webgl2 rendering context from html canvas element
@@ -46,70 +51,77 @@ const program = gl.createProgram();
     gl.linkProgram(program);
 
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fails
+        console.log(gl.getShaderInfoLog(vertexShader));
         console.log(gl.getShaderInfoLog(fragmentShader));
     }
 }
 
 gl.useProgram(program);
 
-const arrayVertexData = new Float32Array([ // x,y position and rbg color
-	0,0,				1,0,0,
-	0.00000,1.00000,	1,0,0,
-	0.95106,0.30902,	1,0,0,
-
-	0,0,				0,1,0,
-	0.95106,0.30902,	0,1,0,
-	0.58779,-.80902,	0,1,0,
-
-	0,0,				0,0,1,
-	0.58779,-.80902,	0,0,1,
-	-.58779,-.80902,	0,0,1,
-
-	0,0,				1,1,0,
-	-.58779,-.80902,	1,1,0,
-	-.95106,0.30902,	1,1,0,
-
-	0,0,				1,0,1,
-	-.95106,0.30902,	1,0,1,
-	0.00000,1.00000,	1,0,1,
+const vertexBufferData = new Float32Array([
+    -.9,-.9,
+    0,.9,
+    .9,-.9,
 ]);
 
-const elementVertexData = new Float32Array([
-	0,0,				0,0,0,
-	0.00000,1.00000,	1,0,0,
-	0.95106,0.30902,	0,1,0,
-	0.58779,-.80902,	0,0,1,
-	-.58779,-.80902,	1,1,0,
-	-.95106,0.30902,	1,0,1,
+const texCoordBufferData = new Float32Array([
+    0,0,
+    .5,1,
+    1,0,
 ]);
 
-const elementIndexData = new Uint8Array([
-    0,1,2,
-    0,2,3,
-    0,3,4,
-    0,4,5,
-    0,5,1,
-])
+const pixels = new Uint8Array([
+	255,255,255,		230,25,75,			60,180,75,			255,225,25,
+	67,99,216,			245,130,49,			145,30,180,			70,240,240,
+	240,50,230,			188,246,12,			250,190,190,		0,128,128,
+	230,190,255,		154,99,36,			255,250,200,		0,0,0,
+]);
 
-// buffer
-const arrayVertexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, arrayVertexBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, arrayVertexData, gl.STATIC_DRAW);
-
-const elementVertexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, elementVertexBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, elementVertexData, gl.STATIC_DRAW);
-
-const elementIndexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementIndexBuffer);
-gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, elementIndexData, gl.STATIC_DRAW);
-
-// gl.bindBuffer(gl.ARRAY_BUFFER, arrayVertexBuffer);
-gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 5*4, 0);
-gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 5*4, 2*4);
-
+// vertex buffer
+const vertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, vertexBufferData, gl.STATIC_DRAW);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 gl.enableVertexAttribArray(0);
+
+// texCoord buffer
+const texCoordBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, texCoordBufferData, gl.STATIC_DRAW);
+gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
 gl.enableVertexAttribArray(1);
 
-// gl.drawArrays(gl.TRIANGLES, 0, 15);
-gl.drawElements(gl.TRIANGLES, 15, gl.UNSIGNED_BYTE, 0);
+const loadImage = () => new Promise(resolve => {
+    const image = new Image();
+    image.addEventListener('load', () => resolve(image));
+    image.src = './kitten.jpg';
+});
+
+const run = async () => {
+    const image = await loadImage();
+
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+
+    const pixelTextureUnit = 0;
+    const kittenTextureUnit = 5;
+
+    gl.uniform1i(gl.getUniformLocation(program, 'uPixelSampler'), pixelTextureUnit);
+    gl.uniform1i(gl.getUniformLocation(program, 'uKittenSampler'), kittenTextureUnit);
+
+    const pixelTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + pixelTextureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, pixelTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 4, 4, 0, gl.RGB, gl.UNSIGNED_BYTE, pixels);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+    const kittenTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + kittenTextureUnit);
+    gl.bindTexture(gl.TEXTURE_2D, kittenTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, 500, 300, 0, gl.RGB, gl.UNSIGNED_BYTE, image);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+};
+
+run();
