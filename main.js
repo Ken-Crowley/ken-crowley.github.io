@@ -1,16 +1,22 @@
 const vertexShaderSource = `#version 300 es
+uniform float uPointSize;
+uniform vec2 uPosition;
+
 void main() {
-    gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
-    gl_PointSize = 150.0;
+    gl_PointSize = uPointSize;
+    gl_Position = vec4(uPosition, 0.0, 1.0);
 }`;
 
 const fragmentShaderSource = `#version 300 es
 precision mediump float;
 
+uniform int uIndex;
+uniform vec4 uColors[3];
+
 out vec4 fragColor;
 
 void main() {
-    fragColor = vec4(1.0, 0.0, 0.0, 1.0);
+    fragColor = uColors[uIndex];
 }`;
 
 // get webgl2 rendering context from html canvas element
@@ -41,4 +47,21 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fa
 
 gl.useProgram(program);
 
+const uPositionLoc = gl.getUniformLocation(program, 'uPosition');
+gl.uniform2f(uPositionLoc, 0, -.2);
+
+const uPointSizeLoc = gl.getUniformLocation(program, 'uPointSize');
+gl.uniform1f(uPointSizeLoc, 100);
+
+const uIndexLoc = gl.getUniformLocation(program, `uIndex`);
+const uColorsLoc = gl.getUniformLocation(program, 'uColors') 
+
+gl.uniform1i(uIndexLoc, 0);
+gl.uniform4fv(uColorsLoc, [
+    1,0,0,1,
+    0,1,0,1,
+    0,0,1,1,
+]);
+
 gl.drawArrays(gl.POINTS, 0, 1);
+
