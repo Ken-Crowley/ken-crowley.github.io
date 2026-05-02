@@ -1,22 +1,29 @@
+// attributes come in from js, varyings go out to fragment shader
 const vertexShaderSource = `#version 300 es
-uniform float uPointSize;
-uniform vec2 uPosition;
+// attributes
+layout(location = 1) in float aPointSize;
+layout(location = 0) in vec2 aPosition;
+layout(location = 2) in vec3 aColor;
+
+// varyings
+out vec3 vColor;
 
 void main() {
-    gl_PointSize = uPointSize;
-    gl_Position = vec4(uPosition, 0.0, 1.0);
+    vColor = aColor;
+    gl_PointSize = aPointSize;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
 }`;
 
+// varyings come in from vertex shader, and color info goes out to frame buffer/canvas
 const fragmentShaderSource = `#version 300 es
 precision mediump float;
 
-uniform int uIndex;
-uniform vec4 uColors[3];
+in vec3 vColor;
 
 out vec4 fragColor;
 
 void main() {
-    fragColor = uColors[uIndex];
+    fragColor = vec4(vColor, 1.0);
 }`;
 
 // get webgl2 rendering context from html canvas element
@@ -47,21 +54,30 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fa
 
 gl.useProgram(program);
 
-const uPositionLoc = gl.getUniformLocation(program, 'uPosition');
-gl.uniform2f(uPositionLoc, 0, -.2);
-
-const uPointSizeLoc = gl.getUniformLocation(program, 'uPointSize');
-gl.uniform1f(uPointSizeLoc, 100);
-
-const uIndexLoc = gl.getUniformLocation(program, `uIndex`);
-const uColorsLoc = gl.getUniformLocation(program, 'uColors') 
-
-gl.uniform1i(uIndexLoc, 0);
-gl.uniform4fv(uColorsLoc, [
-    1,0,0,1,
-    0,1,0,1,
-    0,0,1,1,
+const bufferData = new Float32Array([  // position, point size buffer, color
+    0,1,            100,        1,0,0,
+    -1,-1,          32,         0,1,0,
+    1,-1,           50,         0,0,1
 ]);
 
-gl.drawArrays(gl.POINTS, 0, 1);
+// location of attributes
+const aPositionLoc = 0;
+const aPointSizeLoc = 1;
+const aColorLoc = 2;
 
+// enable attributes
+gl.enableVertexAttribArray(aPositionLoc);
+gl.enableVertexAttribArray(aPointSizeLoc);
+gl.enableVertexAttribArray(aColorLoc);
+
+// array buffer
+const buffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+gl.bufferData(gl.ARRAY_BUFFER, bufferData, gl.STATIC_DRAW);
+
+// unravel chain of js ints and floats into the values that shader excepts/needs
+gl.vertexAttribPointer(aPositionLoc, 2, gl.FLOAT, false, 6 * 4, 0);
+gl.vertexAttribPointer(aPointSizeLoc, 1, gl.FLOAT, false, 6 * 4, 2 * 4);
+gl.vertexAttribPointer(aColorLoc, 3, gl.FLOAT, false, 6 * 4, 3 * 4);
+
+gl.drawArrays(gl.TRIANGLES, 0, 3);
