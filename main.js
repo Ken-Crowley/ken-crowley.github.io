@@ -1,31 +1,35 @@
 // attributes come in from js, varyings go out to fragment shader
 const vertexShaderSrc = `#version 300 es
 // attributes
-
 layout(location=0) in vec4 aPosition;
 layout(location=1) in vec2 aTexCoord;
+layout(location=2) in float aDepth;
 
 // varyings
 out vec2 vTexCoord;
+out float vDepth;
 
 void main()
 {
     vTexCoord = aTexCoord;
+    vDepth = aDepth;
     gl_Position = aPosition;
 }`;
 
 // varyings come in from vertex shader, and color info goes out to frame buffer/canvas
 const fragmentShaderSrc = `#version 300 es
 precision mediump float;
+precision mediump sampler2DArray;
 
-uniform sampler2D uSampler;
+uniform sampler2DArray uSampler;
 in vec2 vTexCoord;
+in float vDepth;
 
 out vec4 fragColor;
 
 void main()
 {
-    fragColor = texture(uSampler, vTexCoord);
+    fragColor = texture(uSampler, vec3(vTexCoord, vDepth));
 }`;
 
 // get webgl2 rendering context from html canvas element
@@ -59,96 +63,77 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) { // if linking program fa
 gl.useProgram(program);
 
 const positionData = new Float32Array([
-    // Quad 1
-    -1,0,
-    0,1,
-    -1,1,
-    -1,0,
-    0,0,
-    0,1,
-
-    // Quad 2
-    0,0,
-    1,1,
-    0,1,
-    0,0,
-    1,0,
-    1,1,
-
-    // Quad 3
-    -1,-1,
-    0,0,
-    -1,0,
-    -1,-1,
-    0,-1,
-    0,0,
-
-    // Quad 4
-    0,-1,
-    1,0,
-    0,0,
-    0,-1,
-    1,-1,
-    1,0,
+    -1,-1,      0,1,
+    1,1,        1,0,
+    -1,1,       0,0,
+    -1,-1,      0,1,
+    1,-1,       1,1,
+    1,1,        1,0,
 ]);
 
-const loadAtlas = () => new Promise(resolve => {
+const loadImage = (name) => new Promise(resolve => {
     const image = new Image();
-    image.src = './assets/kenney_medieval-rts/output/atlas.full.png'
+    image.src = `./assets/kenney_medieval-rts/output/${name}.png`;
     image.addEventListener('load', () => resolve(image));
 });
+
 const createUVLookup = async () => {
     const file = await fetch('./assets/kenney_medieval-rts/atlas.json');
     const data = await file.json();
 
-    const w = 128 / 1024;
-    const h = 128 / 2048;
-    const hPadding = .25 / 1024;
-    const vPadding = .25 / 2048;
+    const names = Object.keys(data);
 
-    return (name) => {
-        if (!data[name]) return null;
-        const [u,v] =  data[name];
+    return (index) => names[index] ?? null;
+};
 
-        return [
-            u + hPadding,                          v - vPadding + h,
-            u - hPadding + w,                      v + vPadding,
-            u + hPadding,                          v + vPadding,
-
-            u + hPadding,                          v - vPadding + h,
-            u - hPadding + w,                      v - vPadding + h,
-            u - hPadding + w,                      v + vPadding,
-        ];
-    };
+const getImageData = (image) => {
+    const { width, height } = image; // Step 1: get the image width and height
+    const tmpCanvas = document.createElement('canvas'); // Step 2: create a canvas of the same size
+    tmpCanvas.width = width;
+    tmpCanvas.height = height;
+    const context = tmpCanvas.getContext('2d'); // Step 3: get a 2D Rendering Context object (aka Context API context)
+    context.drawImage(image, 0,0); // Step 4: upload your image to the GPU
+    return context.getImageData(0,0, width, height).data; // Step 5: read the pixel data off the canvas and return it
 };
 
 const main = async () => {
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, positionData, gl.STATIC_DRAW);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.enableVertexAttribArray(0);
+    const image = await loadImage('atlas.full');
+    const imageData = getImageData(image);
+    const getImageName = await createUVLookup();
+    
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture);
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, 128,128,126);
 
-    const texCoordData = new Float32Array(2 * 4 * 6);
-    const texCoordBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, texCoordBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, texCoordData.byteLength, gl.DYNAMIC_DRAW);
-    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+    const pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
+    gl.bufferData(gl.PIXEL_UNPACK_BUFFER, imageData, gl.STATIC_DRAW);
+    gl.pixelStorei(gl.UNPACK_ROW_LENGTH, image.width);
+    gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, image.height);
+    
+    for (let i = 0; i < 126; i++) {
+        const row = Math.floor(i / 8) * 128;
+        const col = (i % 8) * 128;
+        // Set origin
+        gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, col);
+        gl.pixelStorei(gl.UNPACK_SKIP_ROWS, row);
+        // load texture
+        gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0,0,0, i, 128,128,1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+    }
+    
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, positionData, gl.STATIC_DRAW);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4*4, 0);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4*4, 8);
+    gl.vertexAttrib1f(2, 78);
+    gl.enableVertexAttribArray(0);
     gl.enableVertexAttribArray(1);
 
-    const image = await loadAtlas();
-    const getUVs = await createUVLookup();
-    texCoordData.set(getUVs('medievalTile_03'), 0);
-    texCoordData.set(getUVs('medievalTile_17'), 12);
-    texCoordData.set(getUVs('medievalTile_05'), 24);
-    texCoordData.set(getUVs('medievalTile_07'), 36);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, texCoordData);
-
-    const texture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1024, 2048, 0, gl.RGBA, gl.UNSIGNED_BYTE, image);
-    gl.generateMipmap(gl.TEXTURE_2D);
-    gl.drawArrays(gl.TRIANGLES, 0, 24);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
 };
 
 main();
